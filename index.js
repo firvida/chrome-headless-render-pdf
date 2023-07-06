@@ -118,8 +118,9 @@ class RenderPDF {
   async renderPdf(url, options) {
     const client = await CDP({ host: this.host, port: this.port });
     this.log(`Opening ${url}`);
-    const { Page, Emulation, LayerTree, NetworkManager } = client;
+    const { Page, Emulation, LayerTree, Runtime } = client;
     await Page.enable();
+    await Runtime.enable();
     await Page.setLifecycleEventsEnabled({ enabled: true });
     await LayerTree.enable();
 
@@ -130,10 +131,34 @@ class RenderPDF {
 
     await this.profileScope("Wait for networkIdle", async () => {
       return new Promise((resolve) => {
+        setTimeout(
+          resolve,
+          3 * (this.options.animationTimeBudget + this.options.jsTimeBudget)
+        );
         Page.lifecycleEvent((args, type) => {
           if (args.name === "networkIdle") {
             resolve();
           }
+        });
+      });
+    });
+
+    await Page.reload();
+    await this.profileScope("Wait for images are fully loaded", async () => {
+      return new Promise((resolve) => {
+        setTimeout(
+          resolve,
+          3 * (this.options.animationTimeBudget + this.options.jsTimeBudget)
+        );
+        Runtime.evaluate({
+          expression: `
+            (() => {
+              const totalImages = document.images.length;
+              let loadedImages = 0;
+              while (loadedImages < totalImages)
+                loadedImages = Array.from(document.images).filter(img => img.complete && img.naturalHeight !== 0).length;
+            })()
+          `,
         });
       });
     });

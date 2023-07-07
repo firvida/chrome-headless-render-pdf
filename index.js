@@ -118,22 +118,29 @@ class RenderPDF {
   async renderPdf(url, options) {
     const client = await CDP({ host: this.host, port: this.port });
     this.log(`Opening ${url}`);
-    const { Page, Emulation, LayerTree, Runtime } = client;
+    const { Page, Emulation, LayerTree, Runtime, Network } = client;
     await Page.enable();
     await Runtime.enable();
     await Page.setLifecycleEventsEnabled({ enabled: true });
     await LayerTree.enable();
 
-    const loaded = this.cbToPromise(Page.loadEventFired);
-    const jsDone = this.cbToPromise(Emulation.virtualTimeBudgetExpired);
+    await Network.enable();
+    await Network.emulateNetworkConditions({
+      offline: false,
+      latency: 200,
+      downloadThroughput: (500 * 1024) / 8,
+      uploadThroughput: (500 * 1024) / 8,
+    });
 
+    const jsDone = this.cbToPromise(Emulation.virtualTimeBudgetExpired);
+    const loaded = this.cbToPromise(Page.loadEventFired);
     await Page.navigate({ url });
 
     await this.profileScope("Wait for networkIdle", async () => {
       return new Promise((resolve) => {
         setTimeout(
           resolve,
-          3 * (this.options.animationTimeBudget + this.options.jsTimeBudget)
+          this.options.animationTimeBudget + this.options.jsTimeBudget
         );
         Page.lifecycleEvent((args, type) => {
           if (args.name === "networkIdle") {
@@ -143,12 +150,11 @@ class RenderPDF {
       });
     });
 
-    await Page.reload();
     await this.profileScope("Wait for images are fully loaded", async () => {
       return new Promise((resolve) => {
         setTimeout(
           resolve,
-          3 * (this.options.animationTimeBudget + this.options.jsTimeBudget)
+          this.options.animationTimeBudget + this.options.jsTimeBudget
         );
         Runtime.evaluate({
           expression: `

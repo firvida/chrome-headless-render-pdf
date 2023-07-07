@@ -128,46 +128,13 @@ class RenderPDF {
     await Network.emulateNetworkConditions({
       offline: false,
       latency: 200,
-      downloadThroughput: (500 * 1024) / 8,
-      uploadThroughput: (500 * 1024) / 8,
+      downloadThroughput: 10240000 / 8,
+      uploadThroughput: 10240000 / 8,
     });
 
     const jsDone = this.cbToPromise(Emulation.virtualTimeBudgetExpired);
     const loaded = this.cbToPromise(Page.loadEventFired);
     await Page.navigate({ url });
-
-    await this.profileScope("Wait for networkIdle", async () => {
-      return new Promise((resolve) => {
-        setTimeout(
-          resolve,
-          this.options.animationTimeBudget + this.options.jsTimeBudget
-        );
-        Page.lifecycleEvent((args, type) => {
-          if (args.name === "networkIdle") {
-            resolve();
-          }
-        });
-      });
-    });
-
-    await this.profileScope("Wait for images are fully loaded", async () => {
-      return new Promise((resolve) => {
-        setTimeout(
-          resolve,
-          this.options.animationTimeBudget + this.options.jsTimeBudget
-        );
-        Runtime.evaluate({
-          expression: `
-            (() => {
-              const totalImages = document.images.length;
-              let loadedImages = 0;
-              while (loadedImages < totalImages)
-                loadedImages = Array.from(document.images).filter(img => img.complete && img.naturalHeight !== 0).length;
-            })()
-          `,
-        });
-      });
-    });
 
     await Emulation.setVirtualTimePolicy({
       policy: "pauseIfNetworkFetchesPending",
